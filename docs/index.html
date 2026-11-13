@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo – clipboard history for macOS</title>
+<meta name="description" content="Echo is a lightweight, native macOS clipboard history app. Press ⌘⇧V, find a clip, press Return, and paste.">
+<link rel="icon" href="echo-icon.png">
+<style>
+:root{
+  --bg:#0b0b0e; --panel:#15151a; --line:rgba(255,255,255,.09);
+  --text:#f3f3f6; --muted:#9a9aa6; --accent:#8b5cf6; --accent2:#c4a1ff;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font:16px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+a{color:var(--accent2);text-decoration:none} a:hover{text-decoration:underline}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+nav{display:flex;align-items:center;justify-content:space-between;padding:20px 0}
+nav .brand{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--text)}
+nav .brand img{width:28px;height:28px}
+nav .links{display:flex;gap:22px;font-size:14px}
+.hero{text-align:center;padding:56px 0 36px;position:relative}
+.hero::before{content:"";position:absolute;inset:-80px 0 auto;height:420px;background:radial-gradient(ellipse at 50% 0,rgba(139,92,246,.28),transparent 65%);pointer-events:none}
+.hero img.icon{width:96px;height:96px;filter:drop-shadow(0 12px 30px rgba(139,92,246,.45))}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.05;letter-spacing:-.03em;margin:22px 0 14px;position:relative}
+h1 span{background:linear-gradient(90deg,var(--accent2),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{max-width:560px;margin:0 auto 28px;color:var(--muted);font-size:18px;position:relative}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;position:relative}
+.btn{padding:11px 20px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid var(--line);color:var(--text);background:var(--panel)}
+.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+.btn:hover{text-decoration:none;filter:brightness(1.12)}
+.req{margin-top:14px;color:var(--muted);font-size:13px;position:relative}
+
+/* ---------- demo ---------- */
+.demo{margin:40px auto 0;max-width:880px}
+.desk{position:relative;aspect-ratio:16/10;border-radius:16px;overflow:hidden;border:1px solid var(--line);
+  background:radial-gradient(120% 90% at 20% 0,#3b2a7a 0,#1b1537 45%,#0f0d1d 100%);box-shadow:0 40px 90px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03)}
+.menubar{position:absolute;inset:0 0 auto;height:6.2%;min-height:22px;background:rgba(20,18,30,.55);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:clamp(9px,1.35vw,12px);color:#e8e8f0}
+.menubar .l,.menubar .r{display:flex;gap:14px;align-items:center}
+.menubar b{font-weight:700}
+.mb-echo{width:1.5em;height:1.5em;border-radius:5px;display:grid;place-items:center;transition:background .2s}
+.mb-echo svg{width:100%;height:100%}
+.mb-echo.flash{background:rgba(139,92,246,.7)}
+.win{position:absolute;left:9%;top:14%;width:58%;height:70%;background:#1e1d26;border-radius:10px;border:1px solid var(--line);box-shadow:0 24px 50px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden}
+.win .tb{height:9%;min-height:22px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#2a2935;font-size:clamp(9px,1.3vw,12px);color:#b9b9c6}
+.win .tb i{width:.8em;height:.8em;border-radius:50%;background:#ff5f57}
+.win .tb i:nth-child(2){background:#febc2e}.win .tb i:nth-child(3){background:#28c840}
+.win .tb span{margin:0 auto;transform:translateX(-1.5em)}
+.doc{padding:5% 6%;font-size:clamp(10px,1.55vw,14px);line-height:1.7;color:#e6e6ee;font-family:var(--font)}
+.doc .dim{color:#8f8fa0}
+.caret{display:inline-block;width:.12em;height:1.1em;background:var(--accent2);vertical-align:text-bottom;margin-left:1px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.pasted{background:rgba(139,92,246,.28);border-radius:3px;transition:background 1.2s}
+.pasted.settled{background:transparent}
+
+/* source clips that get "copied" */
+.src{position:absolute;right:5%;width:26%;background:#fff;color:#1c1c24;border-radius:9px;padding:.55em .7em;font-size:clamp(8px,1.2vw,11px);line-height:1.35;box-shadow:0 14px 30px rgba(0,0,0,.4);opacity:0;transform:translateX(24px);transition:opacity .35s,transform .35s}
+.src small{display:block;color:#7a7a88;font-size:.85em;margin-bottom:.2em;text-transform:uppercase;letter-spacing:.05em}
+.src.on{opacity:1;transform:none}
+.src.fly{opacity:0;transform:translate(-120%,-300%) scale(.2);transition:transform .6s cubic-bezier(.5,0,.8,.4),opacity .6s}
+
+/* popup */
+.pop{position:absolute;left:34%;top:27%;width:36%;min-width:230px;background:rgba(32,31,42,.92);backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.14);border-radius:12px;box-shadow:0 30px 60px rgba(0,0,0,.6);font-size:clamp(8.5px,1.25vw,12px);padding:.7em;opacity:0;transform:translateY(8px) scale(.97);transform-origin:20% 0;transition:opacity .18s,transform .18s;pointer-events:none}
+.pop.show{opacity:1;transform:none}
+.pop .hd{display:flex;align-items:center;gap:.5em;font-weight:600;font-size:1.1em;margin-bottom:.6em}
+.pop .hd svg{width:1.2em;height:1.2em;color:var(--accent2)}
+.pop .search{display:flex;align-items:center;gap:.5em;background:rgba(255,255,255,.07);border-radius:7px;padding:.45em .6em;color:#e9e9f2;margin-bottom:.6em;min-height:2.3em}
+.pop .search em{color:#8a8a99;font-style:normal}
+.pop .sec{font-size:.8em;letter-spacing:.08em;color:#8a8a99;margin:.3em .2em .3em;display:flex;justify-content:space-between}
+.clip{display:flex;align-items:center;gap:.55em;padding:.5em .55em;border-radius:7px;color:#e9e9f2;max-height:3em;overflow:hidden;transition:background .12s,opacity .2s,max-height .25s,padding .25s,margin .25s}
+.clip .ic{width:1.9em;height:1.9em;border-radius:5px;background:rgba(255,255,255,.08);display:grid;place-items:center;flex:none;font-size:.9em;color:#bdb0e8}
+.clip .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clip .k{font-size:.85em;color:#b9a4f5;opacity:0}
+.clip.sel{background:var(--accent)}
+.clip.sel .ic{background:rgba(255,255,255,.22);color:#fff}
+.clip.sel .k{opacity:1;color:#fff}
+.clip.hide{opacity:0;max-height:0;padding-top:0;padding-bottom:0}
+.clip .thumb{width:1.9em;height:1.9em;border-radius:4px;background:linear-gradient(135deg,#6ee7b7,#3b82f6)}
+.pop .ft{display:flex;justify-content:space-between;color:#8a8a99;font-size:.8em;margin-top:.5em;padding-top:.5em;border-top:1px solid rgba(255,255,255,.08)}
+
+.keys{position:absolute;left:50%;bottom:5%;transform:translate(-50%,10px);display:flex;gap:.4em;opacity:0;transition:.25s}
+.keys.show{opacity:1;transform:translate(-50%,0)}
+.key{min-width:2.4em;height:2.4em;padding:0 .7em;display:grid;place-items:center;border-radius:8px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-bottom-width:3px;color:#fff;font-size:clamp(11px,1.7vw,16px);font-weight:600;backdrop-filter:blur(10px)}
+.cap{position:absolute;left:0;right:0;bottom:-3.4em;text-align:center;color:var(--muted);font-size:15px;min-height:1.6em;transition:opacity .25s}
+.steps{display:flex;justify-content:center;gap:8px;margin-top:3.6em}
+.steps button{all:unset;cursor:pointer;width:34px;height:4px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;position:relative}
+.steps button i{position:absolute;inset:0;background:var(--accent2);transform:scaleX(0);transform-origin:left}
+.steps button.done i{transform:none}
+.steps button.run i{animation:fill var(--d,3s) linear forwards}
+@keyframes fill{to{transform:none}}
+.demo-wrap{position:relative}
+.replay{display:block;margin:14px auto 0;all:unset;cursor:pointer;color:var(--muted);font-size:13px;text-align:center;display:block;width:max-content;margin:12px auto 0}
+.replay:hover{color:var(--text)}
+
+/* sections */
+section{padding:72px 0 0}
+h2{font-size:clamp(24px,3.6vw,34px);letter-spacing:-.02em;margin-bottom:10px}
+.lead{color:var(--muted);max-width:620px;margin-bottom:30px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+.card .em{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(139,92,246,.18);color:var(--accent2);margin-bottom:12px;font-size:17px}
+.card h3{font-size:16px;margin-bottom:4px}
+.card p{color:var(--muted);font-size:14.5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+pre{background:#0f0f14;border:1px solid var(--line);border-radius:12px;padding:16px 18px;font:13.5px/1.7 var(--mono);color:#dcdce6;overflow:auto}
+pre .c{color:#6f6f80}
+kbd{font:600 12px var(--mono);background:rgba(255,255,255,.1);border:1px solid var(--line);border-bottom-width:2px;padding:1px 6px;border-radius:5px}
+ul.keys-list{list-style:none;padding:0;display:grid;gap:10px;color:var(--muted);font-size:15px}
+ul.keys-list li b{color:var(--text);font-weight:500}
+footer{margin-top:80px;border-top:1px solid var(--line);padding:28px 0 40px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.two{grid-template-columns:1fr}.cap{bottom:-3.6em}nav .links a:not(.gh){display:none}.pop{left:18%;width:62%}}
+@media(prefers-reduced-motion:reduce){.caret{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="echo-icon.png" alt="">Echo</a>
+    <div class="links"><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#install">Install</a><a class="gh" href="https://github.com/bufferBrew/echo">GitHub</a></div>
+  </nav>
+
+  <header class="hero">
+    <img class="icon" src="echo-icon.png" alt="Echo clipboard icon">
+    <h1>Your clipboard, <span>remembered.</span></h1>
+    <p class="sub">Echo is a lightweight, native clipboard history for macOS. Press <kbd>⌘⇧V</kbd>, find the clip, press <kbd>Return</kbd>, and it’s pasted.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Build Echo</a>
+      <a class="btn" href="https://github.com/bufferBrew/echo">View on GitHub</a>
+    </div>
+    <p class="req">Source on GitHub · macOS 13+ · No third-party dependencies</p>
+  </header>
+
+  <div class="demo" id="demo" aria-label="Animated demo of Echo pasting a saved clip">
+    <div class="demo-wrap">
+      <div class="desk" id="desk">
+        <div class="menubar">
+          <div class="l"><span></span><b>Notes</b><span>File</span><span>Edit</span></div>
+          <div class="r">
+            <span class="mb-echo" id="mb" title="Echo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></span>
+            <span>Fri 5:23 PM</span>
+          </div>
+        </div>
+
+        <div class="win">
+          <div class="tb"><i></i><i></i><i></i><span>Reply to Sam</span></div>
+          <div class="doc" id="doc"></div>
+        </div>
+
+        <div class="src" id="s1" style="top:18%"><small>From Safari</small>https://pay.example.com/inv/2041</div>
+        <div class="src" id="s2" style="top:36%"><small>From Messages</small>Thursday works for me!</div>
+        <div class="src" id="s3" style="top:54%"><small>From Preview</small>Screenshot 2026-11-13.png</div>
+
+        <div class="pop" id="pop" role="img" aria-label="Echo popup">
+          <div class="hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>Echo</div>
+          <div class="search">⌕ <span id="q"><em>Search clips</em></span></div>
+          <div class="sec"><span id="sec">RECENT CLIPS</span><span id="cnt">5</span></div>
+          <div id="list"></div>
+          <div class="ft"><span>esc Close</span><span>↑↓ Navigate · ↵ Paste</span></div>
+        </div>
+
+        <div class="keys" id="keys"><div class="key">⌘</div><div class="key">⇧</div><div class="key">V</div></div>
+      </div>
+      <div class="cap" id="cap" aria-live="polite"></div>
+    </div>
+    <div class="steps" id="steps"></div>
+    <button class="replay" id="replay">↻ Replay</button>
+  </div>
+
+  <section id="features">
+    <h2>Fast to open. Easy to trust.</h2>
+    <p class="lead">Echo stays out of the way in your menu bar and shows up right where you’re typing.</p>
+    <div class="grid">
+      <div class="card"><div class="em">⌘</div><h3>Global shortcut</h3><p>Defaults to ⌘⇧V and can be changed to any combination you like.</p></div>
+      <div class="card"><div class="em">⌖</div><h3>Appears at your caret</h3><p>A compact, resizable popup opens near the text caret, falling back to your mouse position.</p></div>
+      <div class="card"><div class="em">⌕</div><h3>Search &amp; filter</h3><p>Search 300 recent clips instantly, or filter down to just text or images.</p></div>
+      <div class="card"><div class="em">★</div><h3>Pin what you reuse</h3><p>Pinned clips stay at the top and survive normal history cleanup.</p></div>
+      <div class="card"><div class="em">✎</div><h3>Edit &amp; alias</h3><p>Edit a clip in place, save a fragment as a new clip, or give text a searchable alias.</p></div>
+      <div class="card"><div class="em">◐</div><h3>Native &amp; accessible</h3><p>Light and dark appearance, keyboard focus indicators and accessible controls.</p></div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="two">
+      <div>
+        <h2>Stays on your Mac.</h2>
+        <p class="lead" style="margin-bottom:0">Clips and images are stored locally on your Mac. Mark a text clip as hidden and Echo shows only its alias in the popup — it still pastes the full text.</p>
+      </div>
+      <ul class="keys-list">
+        <li><kbd>↑</kbd> <kbd>↓</kbd> &nbsp;<b>Move through clips</b></li>
+        <li><kbd>↵</kbd> &nbsp;<b>Paste the selected clip</b></li>
+        <li><kbd>⌘F</kbd> &nbsp;<b>Focus search</b></li>
+        <li><kbd>⌘,</kbd> &nbsp;<b>Open settings</b></li>
+        <li><kbd>esc</kbd> &nbsp;<b>Dismiss</b></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Build it in a minute.</h2>
+    <p class="lead">Requires macOS 13+ and Apple’s Swift toolchain (Xcode or Command Line Tools).</p>
+<pre><span class="c"># clone, build, sign and install to /Applications</span>
+git clone https://github.com/bufferBrew/echo.git
+cd echo
+./build.sh
+open /Applications/Echo.app</pre>
+    <p class="lead" style="margin-top:14px;font-size:14px">Automatic paste needs <b>System Settings → Privacy &amp; Security → Accessibility → Echo</b>. Without it, Echo still copies the clip so you can press ⌘V.</p>
+  </section>
+
+  <footer><span>Echo · a bufferBrew Labs project</span><a href="https://github.com/bufferBrew/echo">github.com/bufferBrew/echo</a></footer>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const doc = $('doc'), pop = $('pop'), list = $('list'), q = $('q'), cap = $('cap'),
+        keys = $('keys'), mb = $('mb'), sec = $('sec'), cnt = $('cnt'), stepsEl = $('steps');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const CLIPS = [
+    {id:'a', ic:'¶',  t:'Thursday works for me!'},
+    {id:'b', ic:'↗',  t:'https://pay.example.com/inv/2041', key:'inv'},
+    {id:'c', ic:'▣',  t:'Screenshot 2026-11-13.png', img:1},
+    {id:'d', ic:'★',  t:'Work address', hidden:1, pin:1},
+    {id:'e', ic:'¶',  t:'Best regards, Alex'}
+  ];
+  const STEPS = [
+    ['Copy things as you normally do.', 5200],
+    ['Press ⌘⇧V where you’re typing.', 2600],
+    ['Search, or use ↑ ↓ to pick a clip.', 3600],
+    ['Press Return. Pasted.', 3200]
+  ];
+  STEPS.forEach((s,i)=>{ const b=document.createElement('button'); b.innerHTML='<i></i>'; b.title=s[0]; b.setAttribute('aria-label',s[0]); b.onclick=()=>play(i); stepsEl.appendChild(b); });
+
+  function renderList(sel, query){
+    list.innerHTML='';
+    const rows = CLIPS.map(c=>{
+      const el=document.createElement('div');
+      const match = !query || (c.key||c.t).toLowerCase().includes(query);
+      el.className='clip'+(match?'':' hide')+(c.id===sel?' sel':'');
+      el.innerHTML = (c.img?'<span class="thumb"></span>':'<span class="ic">'+c.ic+'</span>')
+        +'<span class="t">'+c.t+'</span>'+(c.hidden?'<span class="k" style="opacity:.8">hidden</span>':'<span class="k">↵</span>');
+      list.appendChild(el); return match;
+    });
+    cnt.textContent = rows.filter(Boolean).length;
+    sec.textContent = query ? 'SEARCH RESULTS' : 'RECENT CLIPS';
+  }
+
+  let run = 0;
+  const wait = (ms, my) => new Promise((res,rej)=>setTimeout(()=>my===run?res():rej('x'),ms));
+  function setStep(i, my){
+    cap.textContent = STEPS[i][0];
+    [...stepsEl.children].forEach((b,j)=>{
+      b.classList.remove('run'); b.classList.toggle('done', j<i);
+      if(j===i){ b.style.setProperty('--d', STEPS[i][1]+'ms'); void b.offsetWidth; b.classList.add('run'); }
+    });
+  }
+  function reset(){
+    pop.classList.remove('show'); keys.classList.remove('show'); mb.classList.remove('flash');
+    ['s1','s2','s3'].forEach(i=>{ $(i).className='src'; });
+    q.innerHTML='<em>Search clips</em>'; renderList(null,'');
+    doc.innerHTML='<span class="dim">To: Sam</span><br><br>Hi Sam,<br>Here’s the invoice: <span id="slot"></span><span class="caret"></span><br><br>Alex';
+  }
+
+  async function play(from=0){
+    const my=++run;
+    try{
+      reset();
+      if(from>=1){ $('s1').className='src'; }
+      // 1 – copy
+      if(from<=0){
+        setStep(0,my);
+        for(const id of ['s1','s2','s3']){
+          await wait(500,my); $(id).classList.add('on');
+          await wait(900,my); $(id).classList.add('fly'); mb.classList.add('flash');
+          await wait(550,my); mb.classList.remove('flash');
+        }
+        await wait(300,my);
+      }
+      // 2 – shortcut
+      setStep(1,my);
+      keys.classList.add('show'); await wait(700,my);
+      pop.classList.add('show'); renderList('a',''); await wait(1300,my);
+      keys.classList.remove('show'); await wait(300,my);
+      // 3 – search / navigate
+      setStep(2,my);
+      await wait(500,my); renderList('b','');
+      await wait(900,my);
+      for(const ch of 'inv'){ q.textContent=(q.textContent.replace('Search clips','')+ch); renderList('b',q.textContent); await wait(260,my); }
+      await wait(1200,my);
+      // 4 – paste
+      setStep(3,my);
+      await wait(700,my);
+      pop.classList.remove('show'); await wait(220,my);
+      $('slot').innerHTML='<span class="pasted" id="pp">https://pay.example.com/inv/2041</span>';
+      await wait(100,my); $('pp').classList.add('settled');
+      await wait(2400,my);
+      [...stepsEl.children].forEach(b=>{b.classList.remove('run');b.classList.add('done')});
+      await wait(1200,my);
+      play(0);
+    }catch(e){ if(e!=='x') throw e; }
+  }
+
+  $('replay').onclick=()=>play(0);
+  if(reduce){ reset(); pop.classList.add('show'); renderList('b',''); cap.textContent='Press ⌘⇧V, pick a clip, press Return.'; }
+  else{
+    // start when visible
+    const io=new IntersectionObserver(e=>{ if(e[0].isIntersecting){ io.disconnect(); play(0);} },{threshold:.3});
+    io.observe($('desk'));
+  }
+  window.__echoDemo={play,reset,renderList,stop:()=>{run++;}};
+})();
+</script>
+</body>
+</html>
