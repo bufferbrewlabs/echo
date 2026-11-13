@@ -4,9 +4,9 @@
 
 A lightweight, native macOS clipboard history app. Find a previous clip, press Return, and paste it into the app you were using.
 
-[![Echo's popup finding a copied invoice link and pasting it into a draft reply](docs/echo-demo.gif)](https://bufferbrewlabs.github.io/echo/)
+[![Echo's popup finding a copied invoice link and pasting it into a draft reply](docs/echo-demo.gif)](docs/index.html)
 
-An animated walkthrough: copy a few things, press **⌘⇧V**, search, and press **Return** to paste. The [live demo page](https://bufferbrewlabs.github.io/echo/) (source in [`docs/index.html`](docs/index.html)) and a [still of the popup](docs/echo-hero.png) are in `docs/`. The animation is a mockup of the popup, not a screen recording.
+An animated walkthrough: copy a few things, press **⌘⇧V**, search, and press **Return** to paste. The [demo page](docs/index.html) source and a [still of the popup](docs/echo-hero.png) are in `docs/`. The animation is a mockup of the popup, not a screen recording.
 
 ## Features
 
