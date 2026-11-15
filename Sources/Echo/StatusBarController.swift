@@ -28,6 +28,7 @@ final class StatusBarController: NSObject, NSWindowDelegate {
     private var preferencesWindowController: PreferencesWindowController?
     private let shortcutRecorder: ShortcutRecorder
     private let historyViewModel = HistoryViewModel()
+    private let launchAtLogin = LaunchAtLogin()
     private var hasShownAccessibilityAlert = false
     /// When the panel last closed because it lost key status, so a click on the
     /// status item that dismissed it isn't immediately treated as a request to reopen.
@@ -45,6 +46,7 @@ final class StatusBarController: NSObject, NSWindowDelegate {
             defer: false
         )
         super.init()
+        launchAtLogin.applyDefaultIfNeeded()
 
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Echo")
@@ -123,7 +125,7 @@ final class StatusBarController: NSObject, NSWindowDelegate {
     @objc private func openPreferences() {
         close()
         if preferencesWindowController == nil {
-            preferencesWindowController = PreferencesWindowController(recorder: shortcutRecorder)
+            preferencesWindowController = PreferencesWindowController(recorder: shortcutRecorder, launchAtLogin: launchAtLogin)
         }
         preferencesWindowController?.show()
     }

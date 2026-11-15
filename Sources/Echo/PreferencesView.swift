@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PreferencesView: View {
     @ObservedObject var recorder: ShortcutRecorder
+    @ObservedObject var launchAtLogin: LaunchAtLogin
 
     var body: some View {
         VStack(alignment: .leading, spacing: EchoStyle.inset) {
@@ -61,12 +62,31 @@ struct PreferencesView: View {
                 .padding(EchoStyle.medium)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            GroupBox {
+                VStack(alignment: .leading, spacing: EchoStyle.large) {
+                    Toggle(isOn: Binding(
+                        get: { launchAtLogin.isEnabled },
+                        set: { launchAtLogin.setEnabled($0) }
+                    )) {
+                        Text("Open Echo at login").font(.headline)
+                    }
+                    .toggleStyle(.switch)
+                    if let error = launchAtLogin.errorMessage {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .padding(EchoStyle.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Label("300 recent clips plus pins, stored on this Mac.", systemImage: "internaldrive")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(EchoStyle.inset)
         .frame(minWidth: 420, idealWidth: 460, maxWidth: .infinity)
         .background(EchoStyle.background)
+        .onAppear { launchAtLogin.refresh() }
         .onDisappear { recorder.cancelRecording() }
     }
 }
