@@ -13,7 +13,7 @@ final class StatusBarController: NSObject, NSWindowDelegate {
     private static let widthDefaultsKey = "popupWidth"
     private static let heightDefaultsKey = "popupHeight"
     /// Distance between the caret and the edge of the popup.
-    private static let anchorGap: CGFloat = 8
+    static let anchorGap: CGFloat = 8
 
     private let statusItem: NSStatusItem
     private let panel: HistoryPanel
@@ -180,22 +180,25 @@ final class StatusBarController: NSObject, NSWindowDelegate {
         let anchor = Self.caretScreenRect() ?? NSRect(origin: NSEvent.mouseLocation, size: .zero)
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor.origin) })
             ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
 
-        var size = savedSize()
-        size.width = min(size.width, visible.width)
-        size.height = min(size.height, visible.height)
+        panel.setFrame(Self.panelFrame(anchor: anchor, size: savedSize(), visible: screen.visibleFrame), display: false)
+    }
 
-        var origin = NSPoint(x: anchor.minX, y: anchor.minY - Self.anchorGap - size.height)
+    /// Places a panel of `size` below `anchor` (or above it when there is no room
+    /// underneath), shrunk and clamped so every edge stays inside `visible`.
+    static func panelFrame(anchor: NSRect, size requested: NSSize, visible: NSRect, gap: CGFloat = anchorGap) -> NSRect {
+        let size = NSSize(width: min(requested.width, visible.width),
+                          height: min(requested.height, visible.height))
+
+        var origin = NSPoint(x: anchor.minX, y: anchor.minY - gap - size.height)
         if origin.y < visible.minY {
             // No room underneath: flip above the caret if that fits.
-            let above = anchor.maxY + Self.anchorGap
+            let above = anchor.maxY + gap
             origin.y = (above + size.height <= visible.maxY) ? above : visible.minY
         }
         origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
         origin.y = min(max(origin.y, visible.minY), visible.maxY - size.height)
-
-        panel.setFrame(NSRect(origin: origin, size: size), display: false)
+        return NSRect(origin: origin, size: size)
     }
 
     private func savedSize() -> NSSize {
