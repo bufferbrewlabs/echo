@@ -14,8 +14,14 @@ func makeImage(width: Int = 2, height: Int = 2) -> NSImage {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-    for x in 0..<width {
-        for y in 0..<height { rep.setColor(.red, atX: x, y: y) }
+    // Write opaque red RGBA bytes directly; setColor would convert colour spaces
+    // and log "Unrecognized colorspace" noise under xctest.
+    let bytes = rep.bitmapData!
+    for row in 0..<height {
+        for column in 0..<width {
+            let pixel = bytes + row * rep.bytesPerRow + column * 4
+            pixel[0] = 255; pixel[1] = 0; pixel[2] = 0; pixel[3] = 255
+        }
     }
     let image = NSImage(size: NSSize(width: width, height: height))
     image.addRepresentation(rep)
