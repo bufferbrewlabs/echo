@@ -262,39 +262,62 @@ final class StatusBarController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// What a key press in the popup does.
+    enum PopupKeyAction: Equatable {
+        case focusSearch, openSettings, moveSelection(Int), paste, close
+        /// Not ours: let it reach the focused control (e.g. typing into search).
+        case passThrough
+    }
+
+    /// Maps a key press to a popup action. Arrow keys only navigate while the search
+    /// field has focus, so they still move focus between rows and menus otherwise.
+    static func popupKeyAction(keyCode: UInt16, characters: String?, command: Bool,
+                               editingSearch: Bool, composingText: Bool) -> PopupKeyAction {
+        if command {
+            switch characters {
+            case "f": return .focusSearch
+            case ",": return .openSettings
+            default: return .passThrough
+            }
+        }
+        // Let an input method commit composed text (e.g. Japanese) before we act.
+        guard !composingText else { return .passThrough }
+        switch keyCode {
+        case 125 where editingSearch: return .moveSelection(1) // Down arrow
+        case 126 where editingSearch: return .moveSelection(-1) // Up arrow
+        case 36, 76: return .paste // Return / keypad Enter
+        case 53: return .close // Escape
+        default: return .passThrough
+        }
+    }
+
     /// Returns nil to swallow the event, or the event itself to let it pass through
     /// (e.g. so normal typing still reaches the search field).
     private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+        let editor = panel.firstResponder as? NSTextView
+        let action = Self.popupKeyAction(keyCode: event.keyCode,
+                                         characters: event.charactersIgnoringModifiers,
+                                         command: event.modifierFlags.contains(.command),
+                                         editingSearch: editor != nil,
+                                         composingText: editor?.hasMarkedText() ?? false)
         let filtered = historyViewModel.filteredItems(from: store.items)
-        if event.modifierFlags.contains(.command) {
-            switch event.charactersIgnoringModifiers {
-            case "f": historyViewModel.focusSearch = UUID(); return nil
-            case ",": openPreferences(); return nil
-            default: return event
-            }
-        }
-        let editingSearch = panel.firstResponder is NSTextView
-        if let editor = panel.firstResponder as? NSTextView, editor.hasMarkedText() {
-            return event // Let the input method commit composed text first.
-        }
-        switch event.keyCode {
-        case 125 where editingSearch: // Down arrow
-            historyViewModel.moveSelection(by: 1, count: filtered.count)
-            return nil
-        case 126 where editingSearch: // Up arrow
-            historyViewModel.moveSelection(by: -1, count: filtered.count)
-            return nil
-        case 36, 76: // Return / keypad Enter
+        switch action {
+        case .focusSearch:
+            historyViewModel.focusSearch = UUID()
+        case .openSettings:
+            openPreferences()
+        case .moveSelection(let delta):
+            historyViewModel.moveSelection(by: delta, count: filtered.count)
+        case .paste:
             if filtered.indices.contains(historyViewModel.selectedIndex) {
                 selected(filtered[historyViewModel.selectedIndex])
             }
-            return nil
-        case 53: // Escape
+        case .close:
             close()
-            return nil
-        default:
+        case .passThrough:
             return event
         }
+        return nil
     }
 
     private func selected(_ item: ClipboardItem) {
