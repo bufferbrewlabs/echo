@@ -1,5 +1,4 @@
 import AppKit
-import Carbon
 
 final class ShortcutRecorder: ObservableObject {
     @Published var isRecording = false
@@ -7,7 +6,8 @@ final class ShortcutRecorder: ObservableObject {
     @Published var modifiers: UInt32 = HotKeyPreference.modifiers
     @Published var errorMessage: String?
 
-    var onChange: ((UInt32, UInt32) -> Void)?
+    /// Applies a new shortcut; returns false when the system refuses it.
+    var onChange: ((UInt32, UInt32) -> Bool)?
 
     private var monitor: Any?
 
@@ -39,32 +39,30 @@ final class ShortcutRecorder: ObservableObject {
             cancelRecording()
             return
         }
-        var carbonModifiers: UInt32 = 0
-        if event.modifierFlags.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
-        if event.modifierFlags.contains(.shift) { carbonModifiers |= UInt32(shiftKey) }
-        if event.modifierFlags.contains(.option) { carbonModifiers |= UInt32(optionKey) }
-        if event.modifierFlags.contains(.control) { carbonModifiers |= UInt32(controlKey) }
-
+        let carbonModifiers = HotKeyPreference.carbonModifiers(from: event.modifierFlags)
         guard carbonModifiers != 0 else {
             errorMessage = "Shortcut must include at least one modifier key (⌘ ⇧ ⌥ ⌃)."
             return
         }
-
-        let newKeyCode = UInt32(event.keyCode)
-        keyCode = newKeyCode
-        modifiers = carbonModifiers
         cancelRecording()
+        apply(keyCode: UInt32(event.keyCode), modifiers: carbonModifiers)
+    }
 
-        HotKeyPreference.set(keyCode: newKeyCode, modifiers: carbonModifiers)
-        onChange?(newKeyCode, carbonModifiers)
+    /// Saves and activates a shortcut only if the system accepts it, so a refused
+    /// combination never replaces a working one.
+    func apply(keyCode newKeyCode: UInt32, modifiers newModifiers: UInt32) {
+        if let onChange, !onChange(newKeyCode, newModifiers) {
+            errorMessage = "\(HotKeyPreference.displayString(keyCode: newKeyCode, modifiers: newModifiers)) is unavailable. Try another shortcut."
+            return
+        }
+        errorMessage = nil
+        keyCode = newKeyCode
+        modifiers = newModifiers
+        HotKeyPreference.set(keyCode: newKeyCode, modifiers: newModifiers)
     }
 
     func resetToDefault() {
         cancelRecording()
-        errorMessage = nil
-        keyCode = HotKeyPreference.defaultKeyCode
-        modifiers = HotKeyPreference.defaultModifiers
-        HotKeyPreference.set(keyCode: keyCode, modifiers: modifiers)
-        onChange?(keyCode, modifiers)
+        apply(keyCode: HotKeyPreference.defaultKeyCode, modifiers: HotKeyPreference.defaultModifiers)
     }
 }

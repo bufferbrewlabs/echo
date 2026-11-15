@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'Assets/ICON-PROMPT.md']
+  pull_request:
+    paths-ignore: ['**.md', 'Assets/ICON-PROMPT.md']
+  workflow_dispatch:
+
+# Read-only token: CI only checks out and builds.
+permissions:
+  contents: read
+
+# A newer push to the same branch or PR cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Standard GitHub-hosted runners are free for public repositories.
+  # On a private repository, macOS minutes bill at 10x the Linux rate.
+  build-and-test:
+    name: Build, test and package (macOS)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Toolchain
+        run: swift --version
+
+      # No third-party packages, so there is nothing to cache or resolve.
+      - name: Build and test (warnings are errors)
+        run: swift test --enable-code-coverage -Xswiftc -warnings-as-errors
+
+      - name: Coverage summary
+        run: |
+          bin="$(swift build --show-bin-path)"
+          xcrun llvm-cov report "$bin/EchoPackageTests.xctest/Contents/MacOS/EchoPackageTests" \
+            -instr-profile "$bin/codecov/default.profdata" \
+            -ignore-filename-regex='(Tests|\.build)/' | tee coverage.txt
+          { echo '### Line coverage (Sources/Echo)'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assemble and sign app bundle
+        run: ./build.sh --no-install
+
+      - name: Verify bundle
+        run: |
+          codesign --verify --strict --verbose=2 Echo.app
+          plutil -lint Echo.app/Contents/Info.plist
+          test -x Echo.app/Contents/MacOS/Echo
+
+  shellcheck:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - run: shellcheck build.sh

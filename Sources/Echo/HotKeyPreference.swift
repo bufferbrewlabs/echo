@@ -9,20 +9,37 @@ enum HotKeyPreference {
     static let defaultKeyCode = UInt32(kVK_ANSI_V)
     static let defaultModifiers = UInt32(cmdKey | shiftKey)
 
+    /// Where the shortcut is stored; tests swap in an isolated suite.
+    static var defaults: UserDefaults = .standard
+
     static var keyCode: UInt32 {
         get {
-            let stored = UserDefaults.standard.object(forKey: keyCodeKey) as? Int
+            let stored = defaults.object(forKey: keyCodeKey) as? Int
             return stored.map(UInt32.init) ?? defaultKeyCode
         }
-        set { UserDefaults.standard.set(Int(newValue), forKey: keyCodeKey) }
+        set { defaults.set(Int(newValue), forKey: keyCodeKey) }
     }
 
     static var modifiers: UInt32 {
         get {
-            let stored = UserDefaults.standard.object(forKey: modifiersKey) as? Int
+            let stored = defaults.object(forKey: modifiersKey) as? Int
             return stored.map(UInt32.init) ?? defaultModifiers
         }
-        set { UserDefaults.standard.set(Int(newValue), forKey: modifiersKey) }
+        set { defaults.set(Int(newValue), forKey: modifiersKey) }
+    }
+
+    static var isDefault: Bool {
+        keyCode == defaultKeyCode && modifiers == defaultModifiers
+    }
+
+    /// Converts AppKit modifier flags into the Carbon mask RegisterEventHotKey expects.
+    static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        var result: UInt32 = 0
+        if flags.contains(.command) { result |= UInt32(cmdKey) }
+        if flags.contains(.shift) { result |= UInt32(shiftKey) }
+        if flags.contains(.option) { result |= UInt32(optionKey) }
+        if flags.contains(.control) { result |= UInt32(controlKey) }
+        return result
     }
 
     static func set(keyCode: UInt32, modifiers: UInt32) {

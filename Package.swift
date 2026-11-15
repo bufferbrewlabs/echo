@@ -14,6 +14,11 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("ApplicationServices")
             ]
+        ),
+        .testTarget(
+            name: "EchoTests",
+            dependencies: ["Echo"],
+            path: "Tests/EchoTests"
         )
     ]
 )

@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager.register(keyCode: HotKeyPreference.keyCode, modifiers: HotKeyPreference.modifiers)
 
         shortcutRecorder.onChange = { [weak self] keyCode, modifiers in
-            self?.hotKeyManager.update(keyCode: keyCode, modifiers: modifiers)
+            self?.hotKeyManager.update(keyCode: keyCode, modifiers: modifiers) ?? false
         }
 
         if !PasteSimulator.hasAccessibilityPermission {

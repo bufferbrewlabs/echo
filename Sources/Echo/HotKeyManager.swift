@@ -1,5 +1,6 @@
 import Carbon
 import AppKit
+import os
 
 /// Registers a single global hotkey (default: Cmd+Shift+V) using the Carbon
 /// Hot Key API, which is still the standard way to get a system-wide shortcut
@@ -24,8 +25,13 @@ final class HotKeyManager {
     }
 
     private var isHandlerInstalled = false
+    private var registered: (keyCode: UInt32, modifiers: UInt32)?
+    private let log = Logger(subsystem: "com.kartikjain.echo", category: "HotKeyManager")
 
-    func register(keyCode: UInt32 = HotKeyPreference.defaultKeyCode, modifiers: UInt32 = HotKeyPreference.defaultModifiers) {
+    /// Registers the shortcut, replacing any previous one. Returns false when the system
+    /// refuses it (for example, a combination another app or macOS already reserves).
+    @discardableResult
+    func register(keyCode: UInt32 = HotKeyPreference.defaultKeyCode, modifiers: UInt32 = HotKeyPreference.defaultModifiers) -> Bool {
         if !isHandlerInstalled {
             var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: OSType(kEventHotKeyPressed))
             InstallEventHandler(GetApplicationEventTarget(), { _, eventRef, userData in
@@ -47,12 +53,24 @@ final class HotKeyManager {
         }
 
         let id = EventHotKeyID(signature: HotKeyManager.signature, id: HotKeyManager.hotKeyID)
-        RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &hotKeyRef)
+        let status = RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &hotKeyRef)
+        guard status == noErr else {
+            hotKeyRef = nil
+            registered = nil
+            log.error("Could not register shortcut \(HotKeyPreference.displayString(keyCode: keyCode, modifiers: modifiers), privacy: .public): OSStatus \(status)")
+            return false
+        }
+        registered = (keyCode, modifiers)
+        return true
     }
 
-    /// Swaps the active shortcut for a new key/modifier combo without tearing down the event handler.
-    func update(keyCode: UInt32, modifiers: UInt32) {
-        register(keyCode: keyCode, modifiers: modifiers)
+    /// Swaps the active shortcut for a new key/modifier combo without tearing down the
+    /// event handler. If the new one is refused, the previous shortcut is restored.
+    func update(keyCode: UInt32, modifiers: UInt32) -> Bool {
+        let previous = registered
+        if register(keyCode: keyCode, modifiers: modifiers) { return true }
+        if let previous { register(keyCode: previous.keyCode, modifiers: previous.modifiers) }
+        return false
     }
 
     func unregister() {
@@ -60,6 +78,7 @@ final class HotKeyManager {
             UnregisterEventHotKey(hotKeyRef)
             self.hotKeyRef = nil
         }
+        registered = nil
         if let eventHandler {
             RemoveEventHandler(eventHandler)
             self.eventHandler = nil

@@ -60,15 +60,64 @@ In the text editor, add an optional **alias** for commonly used text. Enable **H
 
 Hiding is a display feature: history is stored **unencrypted** on your Mac. Echo is not a password vault. **Clear History…** removes pinned clips too. Removing history does not erase text already on the system clipboard or in another app.
 
-## Local storage
+## Privacy and local storage
 
-History and images are stored in `~/Library/Application Support/Echo`. History is persisted as JSON and images as PNG files. The app has no network service or account; clips stay on your Mac. Clear saved clips using **Clear History…** in Echo's menu.
+History and images are stored in `~/Library/Application Support/Echo`. History is persisted as JSON and images as PNG files, readable only by your user account (folders `0700`, files `0600`). The app has no network service or account; clips stay on your Mac. Clear saved clips using **Clear History…** in Echo's menu.
 
-## Navigation checks
+Echo does not record clipboard content that the source app marks as concealed, transient, or auto-generated ([nspasteboard.org](http://nspasteboard.org) markers). Password managers use these markers, so copied passwords are not saved. Apps that copy secrets without the markers are recorded like any other text.
+
+If `history.json` cannot be read (for example, after disk corruption), Echo renames it to `history.unreadable-<timestamp>.json` and starts with an empty history, rather than overwriting it. Images are kept in that case so the history can be recovered by hand. On a normal launch, image files that no clip refers to are deleted.
+
+Errors saving history, images, or the shortcut are logged under the `com.kartikjain.echo` subsystem. View them in Console.app, or run:
 
 ```sh
-swiftc Sources/Echo/ClipboardItem.swift Sources/Echo/HistoryViewModel.swift Sources/Echo/HistoryStore.swift Tests/main.swift -o /tmp/echo-navigation-tests
-/tmp/echo-navigation-tests
+log stream --predicate 'subsystem == "com.kartikjain.echo"'
 ```
 
-These checks cover filtering, selection, legacy history decoding, pinned retention, editing, hidden alias search, persistence, and image removal. Cross-app paste also requires a manual check in an editable destination with Accessibility permission enabled.
+## Development
+
+### Project layout
+
+| Path | Contents |
+|---|---|
+| `Sources/Echo/HistoryStore.swift` | Clip history, pins, trimming, and JSON/PNG persistence |
+| `Sources/Echo/ClipboardMonitor.swift` | Pasteboard polling and concealed-clip filtering |
+| `Sources/Echo/HistoryViewModel.swift` | Search, filter, and keyboard selection state |
+| `Sources/Echo/StatusBarController.swift` | Menu bar item, popup panel placement, and paste flow |
+| `Sources/Echo/HotKey*.swift`, `ShortcutRecorder.swift` | Global shortcut registration and settings |
+| `Sources/Echo/*View.swift` | SwiftUI popup, clip editor, and settings |
+| `Tests/EchoTests/` | XCTest suite |
+
+### Tests
+
+```sh
+swift test
+```
+
+The suite covers history recording, ordering, pin retention, the 300-clip limit, editing and hidden aliases, image files and cleanup, recovery from unreadable history, file permissions, search and selection, pasteboard monitoring (on a private pasteboard, so your real clipboard is untouched), password-manager filtering, shortcut persistence and refusal, and popup placement.
+
+For a line-coverage report:
+
+```sh
+swift test --enable-code-coverage
+xcrun llvm-cov report "$(swift build --show-bin-path)/EchoPackageTests.xctest/Contents/MacOS/EchoPackageTests" \
+  -instr-profile "$(swift build --show-bin-path)/codecov/default.profdata" -ignore-filename-regex='(Tests|\.build)/'
+```
+
+These need a manual check on a real Mac: cross-app paste (with Accessibility permission, into an editable field), caret detection, the global shortcut, and the SwiftUI views.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`. Changes that touch only Markdown are skipped. On a `macos-15` runner it builds with warnings treated as errors, runs the tests with coverage (shown in the run summary), and assembles and verifies the ad-hoc-signed `Echo.app`. A Linux job runs `shellcheck` on `build.sh`. Standard GitHub-hosted runners are free for public repositories. Dependabot keeps the pinned actions current.
+
+## Troubleshooting
+
+- **Selecting a clip copies but doesn't paste.** Accessibility permission is missing or stale after a rebuild. See [stable local signing](SIGNING.md).
+- **"Shortcut is unavailable" in Settings.** macOS or another app refused that key combination. Echo keeps your previous shortcut; choose another.
+- **History disappeared after a crash.** Look for `history.unreadable-*.json` in `~/Library/Application Support/Echo`.
+
+## Known limitations
+
+- Only plain text and images are recorded. Rich text, files, and other pasteboard types are not.
+- History is stored unencrypted. Hidden clips only hide text in the popup.
+- The clipboard is polled every 0.5 seconds, so a clip replaced faster than that can be missed.
